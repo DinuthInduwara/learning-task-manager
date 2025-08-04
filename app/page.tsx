@@ -96,10 +96,10 @@ export default function HomePage() {
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.notes?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.lesson?.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesSubject = !selectedSubject || task.subject_id === selectedSubject
-    const matchesLesson = !selectedLesson || task.lesson === selectedLesson
-    const matchesType = !selectedType || task.type === selectedType
-    const matchesStatus = !selectedStatus || task.status === selectedStatus
+    const matchesSubject = !selectedSubject || selectedSubject === "all" || task.subject_id === selectedSubject
+    const matchesLesson = !selectedLesson || selectedLesson === "all" || task.lesson === selectedLesson
+    const matchesType = !selectedType || selectedType === "all" || task.type === selectedType
+    const matchesStatus = !selectedStatus || selectedStatus === "all" || task.status === selectedStatus
 
     return matchesSearch && matchesSubject && matchesLesson && matchesType && matchesStatus
   })

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { format, isToday, isPast } from "date-fns"
-import { Calendar, Clock, ExternalLink, MoreHorizontal, Trash2, CheckCircle2, Circle } from "lucide-react"
+import { Calendar, Clock, ExternalLink, MoreHorizontal, Trash2, CheckCircle2, Circle, Edit } from "lucide-react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -199,19 +199,17 @@ export function TaskCard({ task, subjects, onUpdate }: TaskCardProps) {
                   </>
                 )}
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <EditTaskDialog
-                  task={task}
-                  subjects={subjects}
-                  onTaskUpdated={onUpdate}
-                  trigger={
-                    <div className="flex items-center w-full cursor-pointer">
-                      <span className="h-4 w-4 mr-2">✏️</span>
-                      Edit Task
-                    </div>
-                  }
-                />
-              </DropdownMenuItem>
+              <EditTaskDialog
+                task={task}
+                subjects={subjects}
+                onTaskUpdated={onUpdate}
+                trigger={
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    <span>Edit Task</span>
+                  </DropdownMenuItem>
+                }
+              />
               <DropdownMenuItem onClick={handleDelete} className="text-red-600">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Task
