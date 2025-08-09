@@ -19,7 +19,8 @@ export function useStudyTimer({ onSessionComplete }: UseStudyTimerProps = {}) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = useRef<number>(0)
-  const pausedTimeRef = useRef<number>(0)
+  const pausedTimeRef = useRef<number>(0)      // total accumulated paused time
+  const pauseStartRef = useRef<number>(0)      // moment pause began
 
   // Request notification permission on mount
   useEffect(() => {
@@ -27,8 +28,8 @@ export function useStudyTimer({ onSessionComplete }: UseStudyTimerProps = {}) {
       if (Notification.permission === "granted") {
         setHasNotificationPermission(true)
       } else if (Notification.permission !== "denied") {
-        Notification.requestPermission().then((permission) => {
-          setHasNotificationPermission(permission === "granted")
+        Notification.requestPermission().then((perm) => {
+          setHasNotificationPermission(perm === "granted")
         })
       }
     }
@@ -60,34 +61,24 @@ export function useStudyTimer({ onSessionComplete }: UseStudyTimerProps = {}) {
         setIsRunning(true)
         setIsPaused(false)
         setTime(0)
+
         startTimeRef.current = Date.now()
         pausedTimeRef.current = 0
+        pauseStartRef.current = 0
 
-        // Start the timer
+        // Start the ticking interval
         intervalRef.current = setInterval(() => {
           const now = Date.now()
           const elapsed = Math.floor((now - startTimeRef.current - pausedTimeRef.current) / 1000)
           setTime(elapsed)
         }, 1000)
 
-        // Set 25-minute break notification
-        notificationTimeoutRef.current = setTimeout(
-          () => {
-            sendBreakNotification()
-          },
-          25 * 60 * 1000,
-        ) // 25 minutes
+        // 25-minute break notification
+        notificationTimeoutRef.current = setTimeout(sendBreakNotification, 25 * 60 * 1000)
 
-        toast({
-          title: "Study Session Started! 📚",
-          description: "Focus time begins now. You've got this!",
-        })
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to start study session",
-          variant: "destructive",
-        })
+        toast({ title: "Study Session Started! 📚", description: "Focus time begins now. You've got this!" })
+      } catch {
+        toast({ title: "Error", description: "Failed to start study session", variant: "destructive" })
       }
     },
     [sendBreakNotification],
@@ -103,39 +94,42 @@ export function useStudyTimer({ onSessionComplete }: UseStudyTimerProps = {}) {
       notificationTimeoutRef.current = null
     }
 
+    // Mark pause start
+    pauseStartRef.current = Date.now()
+
     setIsPaused(true)
     setIsRunning(false)
-    pausedTimeRef.current += Date.now() - startTimeRef.current
   }, [])
 
   const resumeTimer = useCallback(() => {
     if (!isPaused) return
 
-    setIsRunning(true)
-    setIsPaused(false)
-    startTimeRef.current = Date.now()
+    // Compute how long we were paused, add to total paused time
+    const pausedDuration = Date.now() - pauseStartRef.current
+    pausedTimeRef.current += pausedDuration
+    pauseStartRef.current = 0
 
+    setIsPaused(false)
+    setIsRunning(true)
+
+    // Restart ticking interval (do NOT reset startTimeRef)
     intervalRef.current = setInterval(() => {
       const now = Date.now()
       const elapsed = Math.floor((now - startTimeRef.current - pausedTimeRef.current) / 1000)
       setTime(elapsed)
     }, 1000)
 
-    // Reset break notification for remaining time
-    const remainingBreakTime = Math.max(0, 25 * 60 - time)
-    if (remainingBreakTime > 0) {
-      notificationTimeoutRef.current = setTimeout(() => {
-        sendBreakNotification()
-      }, remainingBreakTime * 1000)
+    // Re-schedule break notification for remaining seconds
+    const remaining = Math.max(0, 25 * 60 - time)
+    if (remaining > 0) {
+      notificationTimeoutRef.current = setTimeout(sendBreakNotification, remaining * 1000)
     }
   }, [isPaused, time, sendBreakNotification])
 
   const stopTimer = useCallback(
     async (notes?: string) => {
       if (!currentSession) return
-
       try {
-        // Clear intervals and timeouts
         if (intervalRef.current) {
           clearInterval(intervalRef.current)
           intervalRef.current = null
@@ -146,7 +140,7 @@ export function useStudyTimer({ onSessionComplete }: UseStudyTimerProps = {}) {
         }
 
         const finalDuration = time
-        const completedSession = await endStudySession(currentSession.id, finalDuration, notes)
+        const completed = await endStudySession(currentSession.id, finalDuration, notes)
 
         setIsRunning(false)
         setIsPaused(false)
@@ -154,36 +148,32 @@ export function useStudyTimer({ onSessionComplete }: UseStudyTimerProps = {}) {
         setCurrentSession(null)
         startTimeRef.current = 0
         pausedTimeRef.current = 0
+        pauseStartRef.current = 0
 
-        const minutes = Math.floor(finalDuration / 60)
-        const seconds = finalDuration % 60
-
+        const mins = Math.floor(finalDuration / 60)
+        const secs = finalDuration % 60
         toast({
           title: "Study Session Complete! 🎉",
-          description: `Great work! You studied for ${minutes}m ${seconds}s`,
+          description: `Great work! You studied for ${mins}m ${secs}s`,
         })
-
-        onSessionComplete?.(completedSession)
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to save study session",
-          variant: "destructive",
-        })
+        onSessionComplete?.(completed)
+      } catch {
+        toast({ title: "Error", description: "Failed to save study session", variant: "destructive" })
       }
     },
     [currentSession, time, onSessionComplete],
   )
 
-  const formatTime = useCallback((seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  const formatTime = useCallback((sec: number) => {
+    const hh = Math.floor(sec / 3600)
+    const mm = Math.floor((sec % 3600) / 60)
+    const ss = sec % 60
+    if (hh > 0) {
+      return `${hh.toString().padStart(2, "0")}:${mm.toString().padStart(2, "0")}:${ss
+        .toString()
+        .padStart(2, "0")}`
     }
-    return `${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+    return `${mm.toString().padStart(2, "0")}:${ss.toString().padStart(2, "0")}`
   }, [])
 
   return {
